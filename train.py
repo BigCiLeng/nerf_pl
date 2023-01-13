@@ -22,19 +22,19 @@ from metrics import *
 # pytorch-lightning
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning import LightningModule, Trainer
-from pytorch_lightning.logging import TestTubeLogger
-
+from pytorch_lightning.loggers import TensorBoardLogger
+from pytorch_lightning.strategies import DDPStrategy
 class NeRFSystem(LightningModule):
     def __init__(self, hparams):
         super(NeRFSystem, self).__init__()
-        self.hparams = hparams
+        self.save_hyperparameters(hparams)
 
         self.loss = loss_dict[hparams.loss_type]()
 
         self.embedding_xyz = Embedding(3, 10) # 10 is the default number
         self.embedding_dir = Embedding(3, 4) # 4 is the default number
         self.embeddings = [self.embedding_xyz, self.embedding_dir]
-
+        
         self.nerf_coarse = NeRF()
         self.models = [self.nerf_coarse]
         if hparams.N_importance > 0:
@@ -70,7 +70,7 @@ class NeRFSystem(LightningModule):
             results[k] = torch.cat(v, 0)
         return results
 
-    def prepare_data(self):
+    def setup(self, stage):
         dataset = dataset_dict[self.hparams.dataset_name]
         kwargs = {'root_dir': self.hparams.root_dir,
                   'img_wh': tuple(self.hparams.img_wh)}
@@ -141,6 +141,7 @@ class NeRFSystem(LightningModule):
         mean_loss = torch.stack([x['val_loss'] for x in outputs]).mean()
         mean_psnr = torch.stack([x['val_psnr'] for x in outputs]).mean()
 
+        self.log('val/loss', mean_loss)
         return {'progress_bar': {'val_loss': mean_loss,
                                  'val_psnr': mean_psnr},
                 'log': {'val/loss': mean_loss,
@@ -151,30 +152,25 @@ class NeRFSystem(LightningModule):
 if __name__ == '__main__':
     hparams = get_opts()
     system = NeRFSystem(hparams)
-    checkpoint_callback = ModelCheckpoint(filepath=os.path.join(f'ckpts/{hparams.exp_name}',
+    checkpoint_callback = ModelCheckpoint(dirpath=os.path.join(f'ckpts/{hparams.exp_name}',
                                                                 '{epoch:d}'),
                                           monitor='val/loss',
                                           mode='min',
                                           save_top_k=5,)
 
-    logger = TestTubeLogger(
+    logger = TensorBoardLogger(
         save_dir="logs",
-        name=hparams.exp_name,
-        debug=False,
-        create_git_tag=False
+        name=hparams.exp_name
     )
 
     trainer = Trainer(max_epochs=hparams.num_epochs,
-                      checkpoint_callback=checkpoint_callback,
+                      callbacks=checkpoint_callback,
                       resume_from_checkpoint=hparams.ckpt_path,
                       logger=logger,
-                      early_stop_callback=None,
-                      weights_summary=None,
-                      progress_bar_refresh_rate=1,
-                      gpus=hparams.num_gpus,
-                      distributed_backend='ddp' if hparams.num_gpus>1 else None,
+                      accelerator='gpu',
+                      devices=hparams.num_gpus,
+                      strategy=DDPStrategy(find_unused_parameters=False),
                       num_sanity_val_steps=1,
-                      benchmark=True,
-                      profiler=hparams.num_gpus==1)
+                      benchmark=True)
 
     trainer.fit(system)

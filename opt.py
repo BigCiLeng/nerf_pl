@@ -4,12 +4,12 @@ def get_opts():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--root_dir', type=str,
-                        default='/home/ubuntu/data/nerf_example_data/nerf_synthetic/lego',
+                        default='../dataset/nerf_llff_data/nerf_llff_data/leaves',
                         help='root directory of dataset')
-    parser.add_argument('--dataset_name', type=str, default='blender',
+    parser.add_argument('--dataset_name', type=str, default='llff',
                         choices=['blender', 'llff'],
                         help='which dataset to train/val')
-    parser.add_argument('--img_wh', nargs="+", type=int, default=[800, 800],
+    parser.add_argument('--img_wh', nargs="+", type=int, default=[504, 378],
                         help='resolution (img_w, img_h) of the image')
     parser.add_argument('--spheric_poses', default=False, action="store_true",
                         help='whether images are taken in spheric poses (for llff)')
@@ -33,9 +33,9 @@ def get_opts():
                         help='batch size')
     parser.add_argument('--chunk', type=int, default=32*1024,
                         help='chunk size to split the input to avoid OOM')
-    parser.add_argument('--num_epochs', type=int, default=16,
+    parser.add_argument('--num_epochs', type=int, default=30,
                         help='number of training epochs')
-    parser.add_argument('--num_gpus', type=int, default=1,
+    parser.add_argument('--num_gpus', type=int, default=2,
                         help='number of gpus')
 
     parser.add_argument('--ckpt_path', type=str, default=None,
